@@ -1,0 +1,36 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: enrollment-service
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  jwt-secret: ${JWT_SECRET:dev-only-change-this-secret-key-32-bytes-minimum}
+  course-host: ${COURSE_GRPC_HOST:course-service}
+  course-port: ${COURSE_GRPC_PORT:9090}
+  grade-host: ${GRADE_GRPC_HOST:grade-service}
+  grade-port: ${GRADE_GRPC_PORT:9092}
+  shards:
+    shard0:
+      jdbc-url: jdbc:postgresql://${DB_HOST:postgres-primary}:5432/enrollment_shard_0
+      username: ${DB_USER:app}
+      password: ${DB_PASSWORD:app_password}
+      maximum-pool-size: 8
+      minimum-idle: 1
+      connection-timeout: 3000
+      pool-name: EnrollmentShard0Pool
+    shard1:
+      jdbc-url: jdbc:postgresql://${DB_HOST:postgres-primary}:5432/enrollment_shard_1
+      username: ${DB_USER:app}
+      password: ${DB_PASSWORD:app_password}
+      maximum-pool-size: 8
+      minimum-idle: 1
+      connection-timeout: 3000
+      pool-name: EnrollmentShard1Pool
+logging:
+  level:
+    com.example.enrollment: INFO

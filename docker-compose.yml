@@ -1,0 +1,137 @@
+services:
+  postgres-primary:
+    image: postgres:16
+    container_name: enrollment-postgres-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    command: ["postgres", "-c", "wal_level=replica", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10", "-c", "password_encryption=scram-sha-256"]
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+  postgres-standby:
+    image: postgres:16
+    container_name: enrollment-postgres-standby
+    entrypoint: ["/bin/bash", "/scripts/standby-entrypoint.sh"]
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      REPLICATION_PASSWORD: replica_password
+    volumes:
+      - pg_standby_data:/var/lib/postgresql/data
+      - ./infra/db/standby-entrypoint.sh:/scripts/standby-entrypoint.sh:ro
+    ports:
+      - "5433:5432"
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 8s
+      timeout: 3s
+      retries: 20
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    environment:
+      DB_HOST: ${DB_HOST:-postgres-primary}
+      DB_USER: app
+      DB_PASSWORD: app_password
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret-key-32-bytes-minimum}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    ports: ["8081:8081"]
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+  course-service:
+    build:
+      context: .
+      dockerfile: course-service/Dockerfile
+    environment:
+      DB_HOST: ${DB_HOST:-postgres-primary}
+      DB_USER: app
+      DB_PASSWORD: app_password
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret-key-32-bytes-minimum}
+    ports: ["8082:8082", "9090:9090"]
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+  enrollment-service:
+    build:
+      context: .
+      dockerfile: enrollment-service/Dockerfile
+    environment:
+      DB_HOST: ${DB_HOST:-postgres-primary}
+      DB_USER: app
+      DB_PASSWORD: app_password
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret-key-32-bytes-minimum}
+      COURSE_GRPC_HOST: course-service
+      COURSE_GRPC_PORT: 9090
+      GRADE_GRPC_HOST: grade-service
+      GRADE_GRPC_PORT: 9092
+    ports: ["8083:8083"]
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+  grade-service:
+    build:
+      context: .
+      dockerfile: grade-service/Dockerfile
+    environment:
+      DB_HOST: ${DB_HOST:-postgres-primary}
+      DB_USER: app
+      DB_PASSWORD: app_password
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-this-secret-key-32-bytes-minimum}
+      COURSE_GRPC_HOST: course-service
+      COURSE_GRPC_PORT: 9090
+      ENROLLMENT_GRPC_HOST: enrollment-service
+      ENROLLMENT_GRPC_PORT: 9091
+    ports: ["8084:8084"]
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    ports: ["8080:80"]
+    # The web node can start even when a backend node is down. Nginx re-resolves service DNS periodically.
+    networks: [enrollment-net]
+    restart: unless-stopped
+
+networks:
+  enrollment-net:
+    driver: bridge
+
+volumes:
+  pg_primary_data:
+  pg_standby_data:

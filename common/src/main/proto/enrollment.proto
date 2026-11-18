@@ -1,0 +1,55 @@
+syntax = "proto3";
+option java_multiple_files = true;
+option java_package = "com.example.enrollment.grpc";
+option java_outer_classname = "EnrollmentProto";
+
+service CourseDirectory {
+  rpc GetSection (SectionRequest) returns (SectionInfo);
+  rpc ReserveSeat (EnrollmentReservationRequest) returns (ReservationResponse);
+  rpc ConfirmReservation (ReservationIdRequest) returns (ReservationResponse);
+  rpc ReleaseReservation (ReservationIdRequest) returns (ActionResponse);
+  rpc IsFacultyAssigned (FacultyAssignmentRequest) returns (AssignmentResponse);
+}
+
+service EnrollmentDirectory {
+  rpc IsStudentEnrolled (StudentEnrollmentRequest) returns (StudentEnrollmentResponse);
+}
+
+service GradeRecords {
+  rpc DeleteGradeForUnenrollment (GradeDeletionRequest) returns (ActionResponse);
+}
+
+message SectionRequest { int64 section_id = 1; }
+message SectionInfo {
+  int64 section_id = 1;
+  int64 course_id = 2;
+  string course_code = 3;
+  string course_title = 4;
+  string section_name = 5;
+  int64 faculty_user_id = 6;
+  bool enrollment_open = 7;
+  int32 capacity = 8;
+  string faculty_name = 9;
+  string meeting_days = 10;
+  string start_time = 11;
+  string end_time = 12;
+}
+message EnrollmentReservationRequest {
+  string request_id = 1;
+  int64 student_id = 2;
+  int64 course_id = 3;
+  int64 section_id = 4;
+}
+message ReservationIdRequest { string request_id = 1; }
+message ReservationResponse {
+  string request_id = 1;
+  bool accepted = 2;
+  string message = 3;
+  SectionInfo section = 4;
+}
+message ActionResponse { bool success = 1; string message = 2; }
+message FacultyAssignmentRequest { int64 faculty_user_id = 1; int64 section_id = 2; }
+message AssignmentResponse { bool assigned = 1; }
+message StudentEnrollmentRequest { int64 student_id = 1; int64 section_id = 2; }
+message StudentEnrollmentResponse { bool enrolled = 1; }
+message GradeDeletionRequest { int64 student_id = 1; int64 section_id = 2; }
